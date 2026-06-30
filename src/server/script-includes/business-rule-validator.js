@@ -1,5 +1,5 @@
 // BusinessRuleValidator — enforces platform safety rules before Business Rule creation.
-// Called as a Script Include: new x_1896745_test.BusinessRuleValidator().validate(...)
+// Called as a Script Include: new x_1896745_brule.BusinessRuleValidator().validate(...)
 var BusinessRuleValidator = Class.create();
 BusinessRuleValidator.prototype = {
     initialize: function() {},
@@ -26,7 +26,7 @@ BusinessRuleValidator.prototype = {
                 result.rationale = 'Notifications, logging, or related record operations run after the record is saved with final state';
             }
         } catch (e) {
-            gs.error('x_1896745_test.BusinessRuleValidator.selectTiming: ' + String(e));
+            gs.error('x_1896745_brule.BusinessRuleValidator.selectTiming: ' + String(e));
             result.error = String(e);
         }
         return result;
@@ -73,7 +73,7 @@ BusinessRuleValidator.prototype = {
                 result.warnings.push('RECOMMENDATION: Top-level if-guard detected. Move condition to filterCondition field instead of script body.');
             }
         } catch (e) {
-            gs.error('x_1896745_test.BusinessRuleValidator.validate: ' + String(e));
+            gs.error('x_1896745_brule.BusinessRuleValidator.validate: ' + String(e));
             result.error = String(e);
         }
         return result;

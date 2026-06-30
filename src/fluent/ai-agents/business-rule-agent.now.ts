@@ -8,7 +8,7 @@
  * including free Personal Developer Instances. No paid plugins required.
  *
  * Endpoint:
- *   POST https://<instance>/api/x_1896745_test/business_rule_agent/generate
+ *   POST https://<instance>/api/x_1896745_brule/business_rule_agent/generate
  *   Content-Type: application/json
  *   Body: { "requirement": "<plain-English rule description>", "name": "<optional rule name>" }
  *
@@ -21,7 +21,7 @@
  */
 import '@servicenow/sdk/global'
 import { RestApi } from '@servicenow/sdk/core'
-import { process } from '../../server/ai-agents/business-rule-orchestrator'
+import { process } from '../../server/ai-agents/business-rule-agent'
 
 export const businessRuleAgent = RestApi({
     $id: Now.ID['business-rule-api'],

@@ -2,7 +2,21 @@
   "permissions": {
     "allow": [
       "Bash(npx *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} \\(time: %{time_total}s\\)\\\\n\" https://dev366378.service-now.com/stats.do)",
+      "Bash(grep -iA6 -E \"could not determine|installation status|timeout|troubl|hibernat\")",
+      "Read(//home/atif/**)",
+      "Read(//home/atif/.config/**)",
+      "Bash(node -e \"const os=require\\('os'\\);const p=require\\('path'\\);console.log\\(p.join\\(os.homedir\\(\\),'.now-sdk'\\)\\)\")",
+      "Bash(secret-tool search *)",
+      "Bash(python3 -c \"import keyring; print\\(keyring.get_keyring\\(\\)\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(cp /tmp/claude-1000/-home-atif-Desktop-servicenow-projects-business-rules-agent/b30bef22-a334-4958-b4ad-b7669d4b3cc7/scratchpad/diag.js ./.diag-tmp.js)",
+      "Bash(node ./.diag-tmp.js)",
+      "Bash(grep -iA8 -E \"delet|tombstone|remove|frozen|regenerat\")"
+    ],
+    "additionalDirectories": [
+      "/home/atif/Desktop/servicenow_projects/business-rules-agent"
     ]
   }
 }

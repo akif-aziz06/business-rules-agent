@@ -1,4 +1,7 @@
 import { gs, GlideRecordSecure } from '@servicenow/glide'
+// Namespaced platform APIs must be imported from their namespace subpath in
+// module context — a bare `sn_ws.RESTMessageV2` throws "sn_ws is not defined".
+import { RESTMessageV2 } from '@servicenow/glide/sn_ws'
 
 // Table keywords used by parseRequirement to identify the target ServiceNow table.
 const TABLE_MAP: Record<string, string> = {
@@ -26,13 +29,14 @@ export function parseRequirement(inputs: Record<string, string>) {
         const raw = String(inputs.requirement || '').trim()
         const text = raw.toLowerCase()
 
-        // Determine trigger event from keywords.
+        // Determine trigger event from keywords. Stems use \w* so inflected
+        // forms match too (created/creating, deleted/removed, searched/queried).
         let triggerEvent = 'update'
-        if (/\b(insert|creat|add|new record|on submit)\b/.test(text)) {
+        if (/\b(insert\w*|creat\w*|add(?:ed|ing|s)?|new\s+record|submit\w*)\b/.test(text)) {
             triggerEvent = 'insert'
-        } else if (/\b(delet|remov|destroy)\b/.test(text)) {
+        } else if (/\b(delet\w*|remov\w*|destroy\w*)\b/.test(text)) {
             triggerEvent = 'delete'
-        } else if (/\b(query|read|fetch|search)\b/.test(text)) {
+        } else if (/\b(quer\w*|read|fetch\w*|search\w*|lookup\w*)\b/.test(text)) {
             triggerEvent = 'query'
         }
 
@@ -67,7 +71,7 @@ export function parseRequirement(inputs: Record<string, string>) {
             parsed_requirement: raw,
         }
     } catch (e) {
-        gs.error('x_1896745_test.parseRequirement: ' + String(e))
+        gs.error('x_1896745_brule.parseRequirement: ' + String(e))
         return { success: false, error: String(e) }
     }
 }
@@ -163,7 +167,7 @@ export function detectConflicts(inputs: Record<string, string>) {
             conflicts_json: JSON.stringify(conflicts),
         }
     } catch (e) {
-        gs.error('x_1896745_test.detectConflicts: ' + String(e))
+        gs.error('x_1896745_brule.detectConflicts: ' + String(e))
         return { success: false, error: String(e) }
     }
 }
@@ -225,7 +229,7 @@ export function validateTiming(inputs: Record<string, string>) {
             errors_json: JSON.stringify(errors),
         }
     } catch (e) {
-        gs.error('x_1896745_test.validateTiming: ' + String(e))
+        gs.error('x_1896745_brule.validateTiming: ' + String(e))
         return { success: false, error: String(e) }
     }
 }
@@ -256,7 +260,7 @@ export function generateScript(inputs: Record<string, string>) {
         } else if (/notif|email|alert/i.test(actionLower)) {
             innerLogic = [
                 '        // Emit a platform event to trigger a notification.',
-                "        gs.eventQueue('x_1896745_test.rule_notification', current, current.getValue('assigned_to'), '');",
+                "        gs.eventQueue('x_1896745_brule.rule_notification', current, current.getValue('assigned_to'), '');",
             ].join('\n')
         } else if (/creat|insert.*record|new.*record/i.test(actionLower)) {
             innerLogic = [
@@ -278,7 +282,7 @@ export function generateScript(inputs: Record<string, string>) {
         } else if (/log|audit|track/i.test(actionLower)) {
             innerLogic = [
                 '        // Audit log — record the business event.',
-                `        gs.info('x_1896745_test: Rule triggered on ${targetTable}, record=' + current.getUniqueValue());`,
+                `        gs.info('x_1896745_brule: Rule triggered on ${targetTable}, record=' + current.getUniqueValue());`,
             ].join('\n')
         } else {
             // Generic placeholder — the LLM layer will refine with the specific action.
@@ -295,7 +299,7 @@ export function generateScript(inputs: Record<string, string>) {
             '    try {',
             innerLogic,
             '    } catch (e) {',
-            "        gs.error('x_1896745_test.generated_rule: ' + String(e));",
+            "        gs.error('x_1896745_brule.generated_rule: ' + String(e));",
             '    }',
             '})();',
         ].join('\n')
@@ -309,7 +313,262 @@ export function generateScript(inputs: Record<string, string>) {
             filter_condition: conditionFilter,
         }
     } catch (e) {
-        gs.error('x_1896745_test.generateScript: ' + String(e))
+        gs.error('x_1896745_brule.generateScript: ' + String(e))
         return { success: false, error: String(e) }
+    }
+}
+
+/**
+ * Safety gate for any generated script body — independent of how it was produced.
+ * Mirrors the non-negotiable platform rule: no current.update() in before/after.
+ */
+function isScriptSafe(script: string, timing: string): boolean {
+    if (!script || !script.trim()) return false
+    if ((timing === 'before' || timing === 'after') && /current\s*\.\s*update\s*\(/.test(script)) return false
+    return true
+}
+
+/**
+ * LLM-assisted Script Generation (optional).
+ * Calls the Anthropic Messages API via RESTMessageV2 to produce a tailored
+ * Business Rule script body. The execution timing and condition are fixed by
+ * the deterministic pipeline (the validator stays the safety gate); the LLM
+ * only fills the script. Returns { success: false } whenever the LLM is
+ * disabled, unconfigured, errors, or returns an unsafe script — the caller
+ * then falls back to the heuristic generateScript().
+ */
+export function generateScriptWithLLM(inputs: Record<string, string>) {
+    try {
+        // LLM generation is enabled simply by setting the api key property.
+        const apiKey = String(gs.getProperty('x_1896745_brule.anthropic_api_key', '')).trim()
+        if (!apiKey) {
+            return { success: false, reason: 'no_key' }
+        }
+
+        const model = String(gs.getProperty('x_1896745_brule.llm_model', 'claude-haiku-4-5')) || 'claude-haiku-4-5'
+        const triggerEvent = String(inputs.trigger_event || 'update')
+        const targetTable = String(inputs.target_table || 'task')
+        const timing = String(inputs.approved_timing || 'after')
+        const conditionFilter = String(inputs.condition_filter || '')
+        const requirement = String(inputs.requirement || inputs.automation_action || '')
+
+        const system = [
+            'You generate ONLY the server-side JavaScript body for a ServiceNow Business Rule (sys_script).',
+            'Non-negotiable platform safety rules:',
+            '- The execution timing is fixed by the caller; do not change it.',
+            '- NEVER call current.update() in a before or after rule — it causes infinite recursive execution loops. In before rules assign fields in memory with current.setValue(...); the platform commits automatically once the rule completes.',
+            '- After rules must never modify the current record; they may only insert/update OTHER tables.',
+            '- Use GlideRecordSecure (never GlideRecord) for any embedded queries.',
+            '- Wrap the whole body in a self-contained IIFE with try/catch that logs failures via gs.error(). current and previous are available as platform globals.',
+            'Return ONLY minified JSON of the exact form {"script":"<the full IIFE as a single JSON-escaped string>"} — no markdown fences, no prose.',
+        ].join('\n')
+
+        const user = [
+            'Requirement: ' + requirement,
+            'Target table (collection): ' + targetTable,
+            'Trigger event: ' + triggerEvent,
+            'Execution timing (when): ' + timing,
+            'Condition filter (already set on the rule — do not re-check it in the script): ' + (conditionFilter || '(none)'),
+            'Write the Business Rule script body.',
+        ].join('\n')
+
+        const requestBody = {
+            model: model,
+            max_tokens: 2048,
+            system: system,
+            messages: [{ role: 'user', content: user }],
+        }
+
+        const r = new RESTMessageV2()
+        r.setEndpoint('https://api.anthropic.com/v1/messages')
+        r.setHttpMethod('POST')
+        r.setRequestHeader('x-api-key', apiKey)
+        r.setRequestHeader('anthropic-version', '2023-06-01')
+        r.setRequestHeader('content-type', 'application/json')
+        r.setRequestBody(JSON.stringify(requestBody))
+
+        const resp = r.execute()
+        const status = resp.getStatusCode()
+        const respBody = String(resp.getBody() || '')
+        if (status !== 200) {
+            gs.error('x_1896745_brule.generateScriptWithLLM: HTTP ' + status + ' ' + respBody.slice(0, 500))
+            return { success: false, reason: 'http_' + status }
+        }
+
+        const parsed: any = JSON.parse(respBody)
+        let text = ''
+        if (parsed && parsed.content && parsed.content.length) {
+            for (let i = 0; i < parsed.content.length; i++) {
+                if (parsed.content[i] && parsed.content[i].type === 'text') {
+                    text += String(parsed.content[i].text || '')
+                }
+            }
+        }
+        text = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
+
+        let scriptObj: any
+        try {
+            scriptObj = JSON.parse(text)
+        } catch (_) {
+            scriptObj = { script: text }
+        }
+        const script = String((scriptObj && scriptObj.script) || '')
+
+        if (!isScriptSafe(script, timing)) {
+            gs.error('x_1896745_brule.generateScriptWithLLM: generated script failed the safety gate — falling back to heuristic')
+            return { success: false, reason: 'unsafe' }
+        }
+
+        return {
+            success: true,
+            validated_script: script,
+            approved_timing: timing,
+            trigger_event: triggerEvent,
+            target_table: targetTable,
+            filter_condition: conditionFilter,
+            generated_by: 'llm',
+        }
+    } catch (e) {
+        gs.error('x_1896745_brule.generateScriptWithLLM: ' + String(e))
+        return { success: false, reason: 'exception' }
+    }
+}
+
+/**
+ * REST API route handler — POST /api/x_1896745_brule/business_rule_agent/generate
+ *
+ * Self-contained (no cross-module imports) so the ServiceNow runtime module
+ * loader resolves it from a single sys_module record. Orchestrates the
+ * pipeline: parse → detect conflicts → validate timing/safety → generate
+ * script → return the validated Business Rule definition. The record itself is
+ * persisted client-side via the platform Table API (the scoped app may not
+ * write to the global sys_script table).
+ */
+export function process(request: any, response: any): void {
+    try {
+        // --- Parse Request Body ---
+        const rawBody = String((request.body && request.body.dataString) || '{}')
+        let body: any = {}
+        try {
+            body = JSON.parse(rawBody)
+        } catch (_) {
+            response.setStatus(400)
+            response.setBody({ error: 'Request body must be valid JSON' })
+            return
+        }
+
+        const requirement = String(body.requirement || '').trim()
+        if (!requirement) {
+            response.setStatus(400)
+            response.setBody({ error: '"requirement" is required in the request body' })
+            return
+        }
+
+        // --- Step 1: Parse Requirement ---
+        const parsed: any = parseRequirement({ requirement })
+        if (!parsed.success) {
+            response.setStatus(422)
+            response.setBody({ step: 'parse', error: String(parsed.error || 'Requirement could not be parsed') })
+            return
+        }
+
+        // --- Step 2: Detect Conflicts (informational — does not block insertion) ---
+        const conflictResult: any = detectConflicts({
+            target_table: String(parsed.target_table),
+            trigger_event: String(parsed.trigger_event),
+        })
+
+        // --- Step 3: Validate Timing & Safety Rules ---
+        const timingResult: any = validateTiming({
+            automation_action: String(parsed.automation_action),
+            parsed_requirement: String(parsed.parsed_requirement),
+            trigger_event: String(parsed.trigger_event),
+        })
+
+        let safetyErrors: string[] = []
+        try { safetyErrors = JSON.parse(String(timingResult.errors_json || '[]')) } catch (_) { safetyErrors = [] }
+
+        if (!timingResult.success || safetyErrors.length > 0) {
+            response.setStatus(422)
+            response.setBody({
+                step: 'validate',
+                error: 'Safety validation blocked rule creation — resolve violations before retrying',
+                violations: safetyErrors,
+                timing_attempted: String(timingResult.approved_timing),
+            })
+            return
+        }
+
+        // --- Step 4: Generate Business Rule Script Body ---
+        // Try the LLM first; fall back to the deterministic heuristic whenever
+        // the LLM is disabled, unconfigured, errors, or returns an unsafe script.
+        let generatedBy = 'llm'
+        let scriptResult: any = generateScriptWithLLM({
+            trigger_event: String(parsed.trigger_event),
+            automation_action: String(parsed.automation_action),
+            target_table: String(parsed.target_table),
+            approved_timing: String(timingResult.approved_timing),
+            condition_filter: String(parsed.condition_filter),
+            requirement: requirement,
+        })
+        if (!scriptResult || !scriptResult.success) {
+            generatedBy = 'heuristic'
+            scriptResult = generateScript({
+                trigger_event: String(parsed.trigger_event),
+                automation_action: String(parsed.automation_action),
+                target_table: String(parsed.target_table),
+                approved_timing: String(timingResult.approved_timing),
+                condition_filter: String(parsed.condition_filter),
+            })
+        }
+
+        if (!scriptResult.success) {
+            response.setStatus(500)
+            response.setBody({ step: 'generate', error: String(scriptResult.error || 'Script generation failed') })
+            return
+        }
+
+        // --- Step 5: Build the validated Business Rule definition ---
+        // A scoped app cannot insert into the global sys_script table
+        // (create_access = false), so the record is persisted client-side via
+        // the platform Table API as the logged-in user. Here we only assemble
+        // and return the fully validated field payload (string-typed for the
+        // Table API) plus a display summary.
+        const ruleName = String(body.name || 'BR_' + String(parsed.target_table) + '_' + String(parsed.trigger_event) + '_auto')
+        const tEvent = String(parsed.trigger_event)
+
+        let warnings: string[] = []
+        try { warnings = JSON.parse(String(timingResult.warnings_json || '[]')) } catch (_) { warnings = [] }
+
+        response.setStatus(200)
+        response.setBody({
+            success: true,
+            ready: true,
+            record: {
+                name: ruleName,
+                collection: String(parsed.target_table),
+                when: String(timingResult.approved_timing),
+                action_insert: tEvent === 'insert' ? 'true' : 'false',
+                action_update: tEvent === 'update' ? 'true' : 'false',
+                action_delete: tEvent === 'delete' ? 'true' : 'false',
+                filter_condition: String(parsed.condition_filter),
+                script: String(scriptResult.validated_script),
+                active: 'true',
+            },
+            summary: {
+                name: ruleName,
+                table: String(parsed.target_table),
+                timing: String(timingResult.approved_timing),
+                trigger_event: tEvent,
+                filter_condition: String(parsed.condition_filter),
+                conflict_count: Number(conflictResult.conflict_count) || 0,
+                generated_by: generatedBy,
+                warnings,
+            },
+        })
+    } catch (e) {
+        gs.error('x_1896745_brule.BusinessRuleOrchestrator: ' + String(e))
+        response.setStatus(500)
+        response.setBody({ error: String(e) })
     }
 }

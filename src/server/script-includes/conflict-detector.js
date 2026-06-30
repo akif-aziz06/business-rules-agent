@@ -1,5 +1,5 @@
 // ConflictDetector — sweeps platform configuration tables for rule/flow conflicts.
-// Called as a Script Include: new x_1896745_test.ConflictDetector().detect(table, event)
+// Called as a Script Include: new x_1896745_brule.ConflictDetector().detect(table, event)
 var ConflictDetector = Class.create();
 ConflictDetector.prototype = {
     initialize: function() {},
@@ -16,7 +16,7 @@ ConflictDetector.prototype = {
             result.conflicts = found;
             result.clear = found.length === 0;
         } catch (e) {
-            gs.error('x_1896745_test.ConflictDetector.detect: ' + String(e));
+            gs.error('x_1896745_brule.ConflictDetector.detect: ' + String(e));
             result.error = String(e);
         }
         return result;

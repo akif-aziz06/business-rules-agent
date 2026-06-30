@@ -9,15 +9,25 @@ declare global {
                         table: 'sys_module'
                         id: '315b4054d5b94e67b3fc702062393aab'
                     }
-                    'business-rule-agent': {
-                        table: 'sn_aia_agent'
-                        id: 'ea5cdb3258424d589f43c959eba6f1bd'
-                        deleted: true
+                    'brg-col': {
+                        table: 'sp_column'
+                        id: '4d42bf2985154eed849f15b1a102a611'
                     }
-                    'business-rule-agent-acl': {
-                        table: 'sys_security_acl'
-                        id: '85133e66a80a4264b4d35ebb6119bb22'
-                        deleted: true
+                    'brg-container': {
+                        table: 'sp_container'
+                        id: '869395d6645f46f480a0df38369742c9'
+                    }
+                    'brg-instance': {
+                        table: 'sp_instance'
+                        id: '5f52645fd0974d69ad55c2a8f996b70b'
+                    }
+                    'brg-row': {
+                        table: 'sp_row'
+                        id: '2a2db17de35f4d39bba9e4443a780e54'
+                    }
+                    'brg-widget': {
+                        table: 'sp_widget'
+                        id: '286a524800144aa6badf9be289e36c2d'
                     }
                     'business-rule-api': {
                         table: 'sys_ws_definition'
@@ -39,6 +49,19 @@ declare global {
                         table: 'sys_module'
                         id: '544fb4d2372a48879f9456f8fb8df468'
                     }
+                    'prop-anthropic-key': {
+                        table: 'sys_properties'
+                        id: 'd349fd27bbff4ce69acdfb947afb2dae'
+                    }
+                    'prop-llm-enabled': {
+                        table: 'sys_properties'
+                        id: 'a5d79b06e1484560a740edb6f53fcc49'
+                        deleted: true
+                    }
+                    'prop-llm-model': {
+                        table: 'sys_properties'
+                        id: 'e3790b16530240688205a5408ab17d5f'
+                    }
                     'src_server_ai-agents_business-rule-agent_ts': {
                         table: 'sys_module'
                         id: '77ccf6888fae4ad982e3950cc76e8526'
@@ -46,6 +69,7 @@ declare global {
                     'src_server_ai-agents_business-rule-orchestrator_ts': {
                         table: 'sys_module'
                         id: 'f9a8b4e7ef5a4edcae3e8e073db3dd8e'
+                        deleted: true
                     }
                     'src_server_script-includes_business-rule-validator_js': {
                         table: 'sys_module'
@@ -55,125 +79,17 @@ declare global {
                         table: 'sys_module'
                         id: '939b1492eda34354ac26ad6a3f381a87'
                     }
+                    'src_server_service-portal_business-rule-generator_client_js': {
+                        table: 'sys_module'
+                        id: 'cbcef98193454e71a7def67274ac5a74'
+                    }
                 }
                 composite: [
                     {
-                        table: 'sn_aia_agent_tool_m2m'
-                        id: '069014cad5014532828f1b1b96b5da30'
-                        deleted: true
+                        table: 'sp_page'
+                        id: '4c09091717e54125ae05ea145f6abfd4'
                         key: {
-                            agent: 'ea5cdb3258424d589f43c959eba6f1bd'
-                            tool: 'badd81edf7984bef8bc05bb5062eb890'
-                        }
-                    },
-                    {
-                        table: 'sn_aia_tool'
-                        id: '06ea9c4b0c94438c9978cea78ca083fb'
-                        deleted: true
-                        key: {
-                            name: 'Parse Requirement'
-                        }
-                    },
-                    {
-                        table: 'sn_aia_agent_tool_m2m'
-                        id: '17ad15e4a1864c62a7397eb75a974651'
-                        deleted: true
-                        key: {
-                            agent: 'ea5cdb3258424d589f43c959eba6f1bd'
-                            tool: '06ea9c4b0c94438c9978cea78ca083fb'
-                        }
-                    },
-                    {
-                        table: 'sn_aia_tool'
-                        id: '40fed985a6a24b29909f9bb06eff8d98'
-                        deleted: true
-                        key: {
-                            name: 'Create Business Rule'
-                        }
-                    },
-                    {
-                        table: 'sn_aia_tool'
-                        id: '44374c6efe2944b69cab69258dafbdb7'
-                        deleted: true
-                        key: {
-                            name: 'Detect Conflicts'
-                        }
-                    },
-                    {
-                        table: 'sn_aia_tool'
-                        id: '468f5c867f8741159cbee5a8457bd93b'
-                        deleted: true
-                        key: {
-                            name: 'Generate Script Body'
-                        }
-                    },
-                    {
-                        table: 'sys_security_acl_role'
-                        id: '4b166e40fbfb43ffb6763080c5acfb22'
-                        deleted: true
-                        key: {
-                            sys_security_acl: '85133e66a80a4264b4d35ebb6119bb22'
-                            sys_user_role: '282bf1fac6112285017366cb5f867469'
-                        }
-                    },
-                    {
-                        table: 'sn_aia_agent_tool_m2m'
-                        id: '8097c323ee4b40279359a24747d2536e'
-                        deleted: true
-                        key: {
-                            agent: 'ea5cdb3258424d589f43c959eba6f1bd'
-                            tool: '468f5c867f8741159cbee5a8457bd93b'
-                        }
-                    },
-                    {
-                        table: 'sn_aia_agent_config'
-                        id: '9cba78f9f7764b27829e454121103c9c'
-                        deleted: true
-                        key: {
-                            agent: 'ea5cdb3258424d589f43c959eba6f1bd'
-                        }
-                    },
-                    {
-                        table: 'sys_agent_access_role_configuration'
-                        id: 'b6b9799e135e4d5794421a9e19d069ad'
-                        deleted: true
-                        key: {
-                            agent: 'ea5cdb3258424d589f43c959eba6f1bd'
-                        }
-                    },
-                    {
-                        table: 'sn_aia_tool'
-                        id: 'badd81edf7984bef8bc05bb5062eb890'
-                        deleted: true
-                        key: {
-                            name: 'Validate Timing & Safety'
-                        }
-                    },
-                    {
-                        table: 'sn_aia_version'
-                        id: 'be42aa2ac2ce4732a93ccb6cadb96a47'
-                        deleted: true
-                        key: {
-                            target_id: 'ea5cdb3258424d589f43c959eba6f1bd'
-                            version_name: 'V1'
-                        }
-                    },
-                    {
-                        table: 'sn_aia_agent_tool_m2m'
-                        id: 'ccf85c2954774a979b75f1a891741211'
-                        deleted: true
-                        key: {
-                            agent: 'ea5cdb3258424d589f43c959eba6f1bd'
-                            tool: '40fed985a6a24b29909f9bb06eff8d98'
-                        }
-                    },
-                    {
-                        table: 'sn_aia_agent_tool_m2m'
-                        id: 'eeafd0c3d55540ac82cdfdac7e68f240'
-                        deleted: true
-                        key: {
-                            agent: 'ea5cdb3258424d589f43c959eba6f1bd'
-                            tool: '44374c6efe2944b69cab69258dafbdb7'
+                            id: 'business_rule_generator'
                         }
                     },
                 ]

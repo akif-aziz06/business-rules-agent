@@ -1,7 +1,7 @@
 {
-    "scope": "x_1896745_test",
-    "scopeId": "5638b09f6bfb4b039dfcc110e1b96cd4",
-    "name": "test",
+    "scope": "x_1896745_brule",
+    "scopeId": "d20d25a9a60860557cb22318ed41cf84",
+    "name": "Business Rule Generator",
     "description": "AI-driven Business Rule Generator — converts natural language requirements into optimized, safe ServiceNow Business Rules",
     "tsconfigPath": "./src/server/tsconfig.json"
 }
