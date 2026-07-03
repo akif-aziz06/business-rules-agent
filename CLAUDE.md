@@ -109,20 +109,25 @@ Key topics for this project:
 
 The pipeline runs as a single self-contained server module ([src/server/ai-agents/business-rule-agent.ts](src/server/ai-agents/business-rule-agent.ts), exported `process`) invoked by the Scripted REST API. It is **one module with no cross-file imports** — the SDK runtime module loader fails to resolve server-to-server TS imports (looks up the path without the `.ts` extension), so all pipeline functions + the route handler live in this one file.
 
+The endpoint returns a **proposal for human review**, not a finished record. The proposal renders in an editable **BR Details tab** in the widget; the record is written to `sys_script` **only after the admin clicks Create** — client-side via the platform Table API (`POST`/`PUT /api/now/table/sys_script`) as the logged-in user, because the scoped app may not write the global `sys_script` table (`create_access=false`).
+
 **Pipeline steps (all inside `process`):**
-1. **Parse Requirement** — extracts trigger event (stem regexes, so "created"/"deleted" match), condition filter, action, and target table from NL
-2. **Detect Conflicts** — sweeps `sys_script`, Flow Designer (`sys_hub_flow`), UI Policies, Data Policies, Client Scripts for overlaps (informational, non-blocking)
-3. **Validate Timing** — enforces Before/After/Async selection + safety rules; blocks with HTTP 422 + `violations` on a safety breach
-4. **Generate Script** — produces a self-contained IIFE handler with try/catch + `gs.error()` logging
-5. **Return definition** — responds 200 with the validated `record` payload + display `summary`. The record is **persisted client-side** via the platform Table API (`POST /api/now/table/sys_script`) as the logged-in user, because the scoped app may not write to the global `sys_script` table (`create_access=false`).
+1. **Vague-prompt interception** — `isVague()` halts on incomplete prompts ("make a BR") and asks for Table/Action/Condition (HTTP 200 + `needs_input`)
+2. **Reasoning** — `llmReason()` (Anthropic) reasons about **Operations** (multi-select insert/update/delete/query), **When-to-run** (before/after/async/display), **Condition-builder-vs-script**, and **Actions-vs-script**; `heuristicReason()` is the deterministic fallback when the LLM is off/errors
+3. **Safety gate** — `validateProposal()` blocks with HTTP 422 + `violations` on `current.update()` in before/after or a broken current/previous scope; emits soft `warnings` (query op, after same-record write, conflict overlap)
+4. **Table + conflicts** — `tableExists()` validates the target against `sys_db_object`; `detectConflicts()` surfaces overlapping active BRs as warnings
+5. **Return proposal** — responds 200 with the editable `proposal` + `meta` (generated_by, warnings, reasoning)
+
+**Output field mapping (built client-side in `buildRecord`):** operations → `action_insert/update/delete/query`; when → `when` (incl. `display`); condition → `filter_condition`; role conditions → `role_conditions`; Actions-vs-script → `advanced` (`false` = native actions: `template` for Set Field Values as `field=value^…`, plus `add_message`/`message`/`abort_action`; `true` = `script`). The source requirement is stored in `description` so duplicate-name checks can detect requirement drift (Overwrite vs Rename).
 
 ## Safety Rules (enforced in code, not just docs)
 
 These are non-negotiable constraints that must be validated in `business-rule-validator.ts`:
 
-- **Never allow** `current.update()` inside `before` or `after` rule scripts — causes recursive execution loops
-- **Never generate** `query` action subscriptions without explicit user confirmation — fires on every table query
-- **Always prefer** `filterCondition` over guard clauses in script body
+- **Never allow** `current.update()` inside `before` or `after` rule scripts — causes recursive execution loops (hard 422)
+- **Query op is allowed** but always surfaced as a warning for explicit review in the BR Details tab (the human-approval step is the confirmation) — fires on every table query
+- **Always prefer** the native Condition Builder (`filter_condition`) over guard clauses in the script body, and native Actions (`template`/`add_message`/`abort_action`) over scripting for simple set/message/abort
+- **Never hardcode** `active=true` — the condition must reflect the actual prompt
 - **Always redirect** After-rule same-record modifications to Before rules with a platform risk warning
 - **Always include** try/catch with `gs.error()` logging in generated scripts
 - **Never use** `GlideRecord` — always `GlideRecordSecure` in server scripts
@@ -136,4 +141,4 @@ These are non-negotiable constraints that must be validated in `business-rule-va
 - `securityAcl` is **mandatory** on every `AiAgent` — the build will fail without it.
 - `versionDetails` (not `versions`) is the correct property name on `AiAgent`.
 - Tool `inputs` for `crud` tools is an **object** (`ToolInputType`); for `script` tools it is an **array**.
-- The generated Business Rule's `script` must be a self-contained IIFE; `current` and `previous` are available as globals — no function wrapper needed.
+- The generated Business Rule's `script` must be a self-contained IIFE that **passes `current, previous` into its signature** — `(function(current, previous){ … })(current, previous);`. A param-less IIFE that references them resolves them as `undefined`. `normalizeScriptScope()` repairs this and the safety gate rejects an unresolved scope.

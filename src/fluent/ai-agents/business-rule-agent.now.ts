@@ -12,12 +12,15 @@
  *   Content-Type: application/json
  *   Body: { "requirement": "<plain-English rule description>", "name": "<optional rule name>" }
  *
- * The route handler orchestrates all 5 pipeline steps:
- *   1. Parse requirement   → trigger_event, target_table, condition_filter, automation_action
- *   2. Detect conflicts    → sweeps sys_script, sys_hub_flow, sys_ui_policy, sys_data_policy2
- *   3. Validate timing     → selects before/after/async, enforces safety rules
- *   4. Generate script     → self-contained IIFE with try/catch + gs.error() logging
- *   5. Insert record       → GlideRecordSecure.insert() into sys_script
+ * The route handler returns a *proposal* for human review — it does not persist
+ * anything. Pipeline:
+ *   1. Vague check       → halts and asks for Table/Action/Condition if incomplete
+ *   2. LLM reasoning     → operations, when-to-run, condition-vs-script, actions-vs-script
+ *                          (deterministic heuristic reasoner as fallback)
+ *   3. Safety gate       → enforces no current.update() in before/after, current/previous scope
+ *   4. Table + conflicts → validates target vs sys_db_object; surfaces overlaps as warnings
+ *   5. Return proposal   → the editable BR Details payload; the record is written
+ *                          client-side via the Table API only after admin confirmation
  */
 import '@servicenow/sdk/global'
 import { RestApi } from '@servicenow/sdk/core'

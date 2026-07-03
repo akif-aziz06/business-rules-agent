@@ -100,3 +100,96 @@
     padding-left: 18px;
     color: #b91c1c;
 }
+
+/* ---- BR Details tab ---- */
+.brg-details {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 2px solid #e5e7eb;
+}
+
+.brg-tab-title {
+    margin: 0 0 4px;
+    font-weight: 600;
+}
+
+.brg-req-star {
+    color: #b91c1c;
+}
+
+.brg-field-error {
+    margin-top: 4px;
+    color: #b91c1c;
+    font-size: 12px;
+}
+
+.brg-sublabel {
+    display: block;
+    margin: 10px 0 4px;
+    font-weight: 600;
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.brg-ops {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 4px;
+}
+
+.brg-check {
+    font-weight: 400;
+    margin: 0;
+    cursor: pointer;
+}
+
+.brg-check input {
+    margin-right: 6px;
+}
+
+.brg-mt {
+    display: block;
+    margin-top: 12px;
+}
+
+.brg-actions {
+    margin-top: 4px;
+}
+
+.brg-setrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.brg-setrow .form-control {
+    flex: 1;
+}
+
+.brg-eq {
+    color: #6b7280;
+    font-weight: 600;
+}
+
+.brg-script {
+    font-family: Menlo, Consolas, monospace;
+    font-size: 12px;
+    resize: vertical;
+}
+
+.brg-dupe {
+    margin-top: 8px;
+    padding: 12px 14px;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    color: #92400e;
+}
+
+.brg-dupe-actions {
+    margin-top: 10px;
+    display: flex;
+    gap: 10px;
+}
