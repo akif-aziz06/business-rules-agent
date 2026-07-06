@@ -47,7 +47,12 @@
 
       <div ng-if="c.warnings.length" class="brg-warn">
         <strong>Warnings</strong>
-        <ul><li ng-repeat="w in c.warnings">{{w}}</li></ul>
+        <ul class="brg-warn-list">
+          <li ng-repeat="w in c.warnings" ng-class="{'brg-warn-resolved': w.resolved}">
+            <span ng-if="w.resolved" class="brg-warn-ok">&#10003; Auto-resolved &mdash; {{w.message}}<span ng-if="w.resolved_value"> (&rarr; {{w.resolved_value}})</span></span>
+            <span ng-if="!w.resolved">{{w.message}}</span>
+          </li>
+        </ul>
       </div>
 
       <!-- Name (entered above with the requirement; mandatory) -->

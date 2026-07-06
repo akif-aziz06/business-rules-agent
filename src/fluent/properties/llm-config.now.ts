@@ -29,5 +29,5 @@ export const llmModel = Property({
     $id: Now.ID['prop-llm-model'],
     name: 'x_1896745_brule.llm_model',
     type: 'string',
-    description: 'Anthropic model id used for script generation (default claude-haiku-4-5; e.g. claude-opus-4-8).',
+    description: 'Anthropic model id used for reasoning (default claude-haiku-4-5 for low cost; set claude-sonnet-4-6 or claude-opus-4-8 for higher reliability).',
 })

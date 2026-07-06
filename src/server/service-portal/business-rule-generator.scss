@@ -95,6 +95,22 @@
     color: #92400e;
 }
 
+.brg-warn-list {
+    margin: 6px 0 0;
+    padding-left: 18px;
+}
+
+/* Resolved warnings stay visible but recede — auditable, not alarming. */
+.brg-warn-resolved {
+    color: #6b7280;
+    list-style: none;
+    margin-left: -18px;
+}
+
+.brg-warn-ok {
+    color: #047857;
+}
+
 .brg-violations {
     margin: 8px 0 0;
     padding-left: 18px;
