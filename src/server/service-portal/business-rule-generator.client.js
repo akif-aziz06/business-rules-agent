@@ -12,10 +12,14 @@ function controller($http) {
 
     c.requirement = ''
     c.name = '' // entered upfront with the requirement; the single source of truth
+    c.nameFromAI = false // true when c.name holds an AI suggestion, not user input
     c.loading = false
     c.saving = false
     c.proposal = null // editable BR Details
     c.warnings = []
+    c.blockingWarnings = [] // unresolved_reference / unverified_table — gate Create
+    c.ackBlocking = false // reviewer acknowledged the blocking warnings
+    c.activateOnCreate = false // unchecked = create the rule inactive (draft); safer default
     c.created = null // populated after successful persist
     c.error = null
     c.violations = []
@@ -28,6 +32,13 @@ function controller($http) {
         if (!c.requirement || c.loading) {
             return
         }
+        // A leftover AI-suggested name from a PRIOR requirement must not seed the
+        // new request — clear it so the server suggests a name for THIS one. A
+        // name the user typed themselves is kept.
+        if (c.nameFromAI) {
+            c.name = ''
+            c.nameFromAI = false
+        }
         c.loading = true
         c.proposal = null
         c.created = null
@@ -35,6 +46,9 @@ function controller($http) {
         c.violations = []
         c.needsInput = null
         c.warnings = []
+        c.blockingWarnings = []
+        c.ackBlocking = false
+        c.activateOnCreate = false
         c.tableInvalid = false
         c.dupe = null
 
@@ -59,11 +73,21 @@ function controller($http) {
 
                     c.proposal = d.proposal
                     c.warnings = (d.meta && d.meta.warnings) || []
+                    // Blocking issues require explicit reviewer acknowledgment
+                    // before Create: an unresolved reference or an unverified
+                    // table is unsafe to persist silently. Everything else warns.
+                    c.blockingWarnings = c.warnings.filter(function (w) {
+                        return w && !w.resolved && (w.issue === 'unresolved_reference' || w.issue === 'unverified_table')
+                    })
+                    c.ackBlocking = false
                     c.tableInvalid = c.proposal.table_exists === false
                     c.loading = false
-                    // If the user left the name blank, adopt the AI's suggestion.
+                    // If the user left the name blank, adopt the AI's suggestion
+                    // and mark it as AI-sourced so a later generate() won't reuse
+                    // it for a different requirement.
                     if (!c.name.trim()) {
                         c.name = c.proposal.name || ''
+                        c.nameFromAI = true
                     }
                     // Now that the table is known, check the name for a duplicate.
                     c.onNameChange()
@@ -104,6 +128,13 @@ function controller($http) {
     }
 
     // ---- Duplicate-name handling --------------------------------------------
+    // Fired when the USER edits the name field (ng-change) — the name is now
+    // user-owned, so clear the AI-sourced flag before re-checking duplicates.
+    c.onNameEdit = function () {
+        c.nameFromAI = false
+        c.onNameChange()
+    }
+
     c.onNameChange = function () {
         c.dupe = null
         c.checkDuplicate()
@@ -144,6 +175,7 @@ function controller($http) {
         var base = (c.name || '').trim()
         var m = base.match(/_v(\d+)$/)
         c.name = m ? base.replace(/_v\d+$/, '_v' + (parseInt(m[1], 10) + 1)) : base + '_v2'
+        c.nameFromAI = false // a deliberately-distinct name is now user-owned
         c.onNameChange()
     }
 
@@ -214,7 +246,7 @@ function controller($http) {
             add_message: addMessage ? 'true' : 'false',
             message: addMessage ? p.actions.message || '' : '',
             abort_action: abortAction ? 'true' : 'false',
-            active: 'true',
+            active: c.activateOnCreate ? 'true' : 'false',
             // Store the source requirement so future duplicate checks can detect
             // whether the requirement behind a same-named rule has changed.
             description: c.requirement || '',
@@ -233,6 +265,12 @@ function controller($http) {
         }
         if (c.tableInvalid) {
             c.error = 'Table does not exist.'
+            return
+        }
+        // Blocking warnings (unresolved reference / unverified table) must be
+        // explicitly acknowledged before persisting — never silently created.
+        if (c.blockingWarnings.length && !c.ackBlocking) {
+            c.error = 'Acknowledge the blocking warning(s) before creating this rule.'
             return
         }
         // If a conflicting rule still needs a decision, wait for the user to

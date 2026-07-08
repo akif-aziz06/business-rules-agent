@@ -69,6 +69,7 @@ type ResolverResolution = {
     key: string
     resolvedValue: string
     confidence: 'exact' | 'fuzzy'
+    raw?: string // the display text that was resolved (for the auto-resolved entry)
 }
 
 // Issue types that are structural/safety calls, never value lookups — a
@@ -115,6 +116,30 @@ function normalizeWarnings(raw: any): StructuredWarning[] {
 
 function otherWarning(message: string): StructuredWarning {
     return { key: null, issue: 'other', raw_value: null, message: String(message || '') }
+}
+
+// Make the resolver's silent wins visible: for every EXACT resolution the panel
+// isn't already showing (i.e. the LLM didn't warn about it), append a collapsed
+// "auto-resolved" entry so the reviewer can see and verify what was converted.
+function addAutoResolvedEntries(warnings: StructuredWarning[], resolutions: ResolverResolution[]): StructuredWarning[] {
+    const present: Record<string, boolean> = {}
+    for (let i = 0; i < warnings.length; i++) if (warnings[i].key) present[warnings[i].key as string] = true
+    const out = warnings.slice()
+    for (let i = 0; i < resolutions.length; i++) {
+        const r = resolutions[i]
+        if (r.confidence !== 'exact' || !r.key || present[r.key]) continue
+        present[r.key] = true
+        const field = r.key.replace(/^field\./, '')
+        out.push({
+            key: r.key,
+            issue: 'other',
+            raw_value: r.raw != null ? r.raw : null,
+            message: field + (r.raw ? ' (from "' + r.raw + '")' : ''),
+            resolved: true,
+            resolved_value: r.resolvedValue,
+        })
+    }
+    return out
 }
 
 // Exact-key join: clear an LLM warning only when the resolver produced an
@@ -594,6 +619,20 @@ logic requires: date/time math, aggregation across other records, multi-step
 branching, or calling a Script Include. Never produce a scripted condition
 for logic the Condition Builder can express — this keeps the rule
 maintainable by non-developers.
+
+ENCODED QUERY SYNTAX (follow exactly — do NOT invent operators):
+  - Clauses join with ^ for AND, ^OR for OR, ^NQ for a new OR-group.
+  - Equality is "=" ALWAYS — including booleans and dot-walked booleans.
+    Never write the word "is", "IS", or "equals" as an operator.
+      "Category is Network"  -> category=Network
+      "Caller is VIP"        -> caller_id.vip=true
+      "Priority is 1 or 2"   -> priority=1^ORpriority=2
+  - Other allowed operators only: != , > , < , >= , <= , LIKE , STARTSWITH ,
+    ENDSWITH , and ISEMPTY / ISNOTEMPTY (these take NO value, e.g.
+    descriptionISEMPTY). Do not use IN unless the requirement genuinely lists
+    multiple values (fieldINa,b,c); a single value uses "=".
+  - If a comparison needs an operator not in this list, put the whole
+    condition in a script instead (advanced=true) rather than guessing syntax.
 
 ═══════════════════════════════════════════════════════════════
 6. ACTIONS: NATIVE "SET FIELD VALUES" vs. SCRIPT
@@ -1084,35 +1123,53 @@ function resolveValue(
         if (/^[0-9a-f]{32}$/i.test(value)) return { value }
         const ref = lookupReference(meta.reference, value)
         if (ref) {
-            return { value: ref.sysId, resolution: { key: key, resolvedValue: ref.sysId, confidence: ref.match } }
+            return { value: ref.sysId, resolution: { key: key, resolvedValue: ref.sysId, confidence: ref.match, raw: value } }
         }
+        // Path B normalized: an unresolved reference is NEVER written as raw
+        // display text (a reference field can't hold "Network Team") — blank the
+        // value and rely on the warning. raw_value preserves what was requested.
         return {
-            value,
+            value: '',
             warning: {
                 key: key,
                 issue: 'unresolved_reference',
                 raw_value: value,
-                message: 'Could not find "' + value + '" in ' + meta.reference + ' for field "' + meta.element + '" — set it manually or confirm the record exists.',
+                message: 'Could not find "' + value + '" in ' + meta.reference + ' for field "' + meta.element + '" — left blank; set it manually or confirm the record exists.',
             },
         }
     }
 
     const choice = lookupChoice(hierarchy, meta.element, value)
     if (choice && typeof choice === 'object') {
-        return { value: choice.value, resolution: { key: key, resolvedValue: choice.value, confidence: choice.match } }
+        return { value: choice.value, resolution: { key: key, resolvedValue: choice.value, confidence: choice.match, raw: value } }
     }
     if (choice === null) {
+        // Path B normalized: an unresolved choice LABEL is not written as raw
+        // text — blank it and warn (raw_value keeps what was requested).
         return {
-            value,
+            value: '',
             warning: {
                 key: key,
                 issue: 'unresolved_choice_label',
                 raw_value: value,
-                message: '"' + value + '" is not a valid choice for field "' + meta.element + '" — pick a valid choice value.',
+                message: '"' + value + '" is not a valid choice for field "' + meta.element + '" — left blank; pick a valid choice value.',
             },
         }
     }
     return { value } // not a choice field — pass through
+}
+
+// The LLM occasionally emits a natural-language equality operator ("field is
+// value", "field equals value"). Normalize the SPACED forms to "=" / "!="
+// conservatively (word boundaries), leaving ISEMPTY/ISNOTEMPTY untouched. A
+// glued/garbled operator that still won't parse is dropped + warned by
+// resolveCondition rather than emitted as-is into filter_condition.
+function normalizeOperatorSyntax(token: string): string {
+    if (/ISEMPTY|ISNOTEMPTY/i.test(token)) return token
+    return token
+        .replace(/\s+is\s+not\s+/gi, '!=')
+        .replace(/\s+is\s+/gi, '=')
+        .replace(/\s+equals?\s+/gi, '=')
 }
 
 // Split "field<op>value" into parts. Word operators are UPPERCASE in encoded
@@ -1159,9 +1216,16 @@ function resolveCondition(
             prefix = 'NQ'
             token = token.slice(2)
         }
-        const parsed = parseClause(token)
+        const parsed = parseClause(normalizeOperatorSyntax(token))
         if (!parsed) {
-            out.push(prefix + token)
+            // Unrecognized operator — never emit garbage into filter_condition.
+            // Drop the clause and warn; the Condition field stays hand-editable.
+            warnings.push({
+                key: null,
+                issue: 'other',
+                raw_value: token,
+                message: 'Could not parse condition clause "' + token + '" (unrecognized operator) — left out of the condition; edit the Condition field manually if needed.',
+            })
             continue
         }
         const meta = resolveField(table, hierarchy, parsed.field)
@@ -1342,7 +1406,9 @@ export function process(request: any, response: any): void {
         // --- Reconcile: clear each LLM warning the resolver actually resolved ---
         const llmWarnings: StructuredWarning[] = Array.isArray((reasoned as any).warnings) ? ((reasoned as any).warnings as StructuredWarning[]) : []
         const reconciled = reconcileWarnings(llmWarnings, resolverResolutions)
-        const warnings = mergeWarnings(reconciled, resolverWarnings, generalMessages)
+        const merged = mergeWarnings(reconciled, resolverWarnings, generalMessages)
+        // Surface every exact resolver confirmation as a collapsed entry (#4).
+        const warnings = addAutoResolvedEntries(merged, resolverResolutions)
 
         // --- Name: honor a caller-supplied name, else suggest a sensible default ---
         if (body.name && String(body.name).trim()) {
@@ -1367,6 +1433,9 @@ export function process(request: any, response: any): void {
             proposal,
             meta: {
                 generated_by: generatedBy,
+                // Self-confirming path flag: "llm" only when the Anthropic call
+                // succeeded, "heuristic" when the key is unset or the LLM errored.
+                reasoning_path: generatedBy === 'llm' ? 'llm' : 'heuristic',
                 warnings,
                 warning_keys: warningKeys,
                 reasoning: String(reasoned.reason || ''),

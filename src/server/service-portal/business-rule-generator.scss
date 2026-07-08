@@ -111,6 +111,31 @@
     color: #047857;
 }
 
+.brg-block {
+    margin-top: 12px;
+    padding: 12px 14px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    color: #b91c1c;
+}
+
+/* Activation opt-in — same shape as .brg-block but neutral: a choice, not an alarm. */
+.brg-activate {
+    margin-top: 12px;
+    padding: 12px 14px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+}
+
+.brg-activate-hint {
+    margin-top: 4px;
+    margin-left: 20px;
+    color: #6b7280;
+    font-size: 12px;
+}
+
 .brg-violations {
     margin: 8px 0 0;
     padding-left: 18px;

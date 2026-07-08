@@ -16,7 +16,7 @@
 
     <label class="brg-label" for="brg-name-top">Business Rule name <span class="brg-req-star">*</span></label>
     <input id="brg-name-top" class="form-control" ng-model="c.name"
-      ng-change="c.onNameChange()" placeholder="BR_my_rule" />
+      ng-change="c.onNameEdit()" placeholder="BR_my_rule" />
     <div class="brg-field-error" ng-if="c.proposal && !c.name.trim()">Name is mandatory.</div>
 
     <button class="btn btn-primary brg-btn"
@@ -55,10 +55,28 @@
         </ul>
       </div>
 
+      <!-- Blocking warnings require explicit acknowledgment before Create -->
+      <div ng-if="c.blockingWarnings.length" class="brg-block">
+        <label class="brg-check">
+          <input type="checkbox" ng-model="c.ackBlocking" />
+          I understand {{c.blockingWarnings.length}} value(s) could not be verified
+          (unresolved reference / unverified table) and want to create the rule anyway.
+        </label>
+      </div>
+
+      <!-- Activation opt-in: rules are created inactive (draft) unless checked -->
+      <div class="brg-activate">
+        <label class="brg-check">
+          <input type="checkbox" ng-model="c.activateOnCreate" />
+          Activate this Business Rule immediately
+        </label>
+        <div class="brg-activate-hint">Leave unchecked to create it in draft (inactive) state for review before turning it on.</div>
+      </div>
+
       <!-- Name (entered above with the requirement; mandatory) -->
       <label class="brg-label" for="brg-name">Name <span class="brg-req-star">*</span></label>
       <input id="brg-name" class="form-control" ng-model="c.name"
-        ng-change="c.onNameChange()" placeholder="BR_my_rule" />
+        ng-change="c.onNameEdit()" placeholder="BR_my_rule" />
       <div class="brg-field-error" ng-if="!c.name.trim()">Name is mandatory.</div>
 
       <!-- Duplicate-name handling (human-in-the-loop) -->
@@ -148,7 +166,7 @@
 
       <button class="btn btn-primary brg-btn"
         ng-click="c.confirm()"
-        ng-disabled="c.saving || !c.name.trim() || c.tableInvalid || (c.dupe && !c.dupe.resolved)">
+        ng-disabled="c.saving || !c.name.trim() || c.tableInvalid || (c.dupe && !c.dupe.resolved) || (c.blockingWarnings.length && !c.ackBlocking)">
         <span ng-if="!c.saving">Create Business Rule</span>
         <span ng-if="c.saving">Creating&hellip;</span>
       </button>
