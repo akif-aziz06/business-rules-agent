@@ -5,3 +5,9 @@ node_modules/
 target/
 *.tsbuildinfo
 .jest_cache
+
+# Audit / internal working docs
+AUDIT_TASK.md
+business-rule-agent-system-prompt.md
+structured-warnings-parser-diff.md
+audit/business_rule_agent_audit_report.md
